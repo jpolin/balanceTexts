@@ -12,6 +12,8 @@
 hs_err_pid*
 /bin/
 
+/data/
+
 .project
 
 .classpath

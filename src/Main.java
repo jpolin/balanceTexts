@@ -1,18 +1,19 @@
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
-
+import java.util.ArrayList;
+import java.util.Date;
 
 /**
  * @author Joe Polin
  *
  */
-public class main {
+public class Main {
 	
 	/**
 	 * @param args:
-	 * 		phone_exportdirectory (default: ../data/phone) // relative to bin dir
-	 * 		carrier_export_directory (default: ../data/carrier) // relative to bin dir
+	 * 		phone_exportdirectory (default: ../data/phone_files) // relative to bin dir
+	 * 		carrier_export_directory (default: ../data/carrier_files) // relative to bin dir
 	 */
 	public static void main(String[] args) {
 		
@@ -22,21 +23,24 @@ public class main {
 		String phoneAggregateName = "phone.csv";
 		String carrierAggregateName = "carrier.csv";
 		
-		// Read args
+		// Read args/enforce defaults
 		if (args.length > 0)
 			phoneDirName = args[0];
 		if (args.length > 1)
 			carrierDirName = args[1];
 		
-		// Combine input files
+		// Find and combine input files
+		File phoneFile, carrierFile;
 		try {
 			// Generate paths
-			URI rootDir = main.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+			URI rootDir = Main.class.getProtectionDomain().getCodeSource().getLocation().toURI();
 			Path phoneDirPath = Paths.get(rootDir.resolve(phoneDirName));
 			Path carrierDirPath = Paths.get(rootDir.resolve(carrierDirName));
 			// Combine files
-			aggregateSimFiles(phoneDirPath, Paths.get(rootDir.resolve(phoneAggregateName)).toFile());
-			aggregateSimFiles(carrierDirPath, Paths.get(rootDir.resolve(carrierAggregateName)).toFile());
+			phoneFile = Paths.get(rootDir.resolve(phoneAggregateName)).toFile();
+			carrierFile = Paths.get(rootDir.resolve(carrierAggregateName)).toFile();
+			aggregateSimFiles(phoneDirPath, phoneFile);
+			aggregateSimFiles(carrierDirPath, carrierFile);
 			
 		} catch (URISyntaxException e) {
 			System.out.println("Could not find specified folders: " + phoneDirName + " " + carrierDirName);
@@ -47,9 +51,24 @@ public class main {
 			return;
 		}
 		
-		// Reconcile these two aggregate files
-//		findDiscrepancies();
+		// Get lists of text records for all files we're interested in (2nd arg is name of class with custom parser)
+		ArrayList<textMessageRecord> phoneRecords = null;
+		ArrayList<textMessageRecord> carrierRecords = null;
+		try {
+			phoneRecords = TextLog.buildRecordList(phoneFile, "phoneRecord");
+			carrierRecords = TextLog.buildRecordList(carrierFile, "carrierRecord");
+		} catch (IOException e) {
+			System.out.println("Failed to parse files");
+			e.printStackTrace();
+			return;
+		}
+		
+		// Reconcile the records
+		
+		
 	}
+	
+
 	
 	// Return the extension of a File. If the file has no extension, return an empty string
 	public static String getFileExtension(File f){
@@ -77,14 +96,14 @@ public class main {
 			if (!desiredExtension.equals(getFileExtension(filePath.toFile())))
 				continue;
 			// Open file
+			System.out.println("Collecting data from " + filePath.toString());
 			FileReader inputFile = new FileReader(filePath.toFile());
 			char buf[] = new char[1024];
 			int charCount = inputFile.read(buf);
 			// Write blocks to aggregate
 			while (charCount != -1){
 				aggregate.write(buf, 0, charCount);
-				charCount = inputFile.read(buf)
-;			}
+				charCount = inputFile.read(buf);			}
 			// Close input file and move onto next one
 			inputFile.close();
 		}
@@ -93,3 +112,5 @@ public class main {
 	}
 
 }
+
+
