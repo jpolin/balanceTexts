@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.*;
 import java.util.ArrayList;
-import java.util.Date;
 
 /**
  * @author Joe Polin
@@ -14,12 +13,16 @@ public class Main {
 	 * @param args:
 	 * 		phone_exportdirectory (default: ../data/phone_files) // relative to bin dir
 	 * 		carrier_export_directory (default: ../data/carrier_files) // relative to bin dir
+	 * 		output_file_name (default: orphanEntries.csv) 
 	 */
 	public static void main(String[] args) {
 		
 		// Defaults (all paths relative to bin directory)
+//		String phoneDirName = "../data/phone_test";
+//		String carrierDirName = "../data/carrier_test";
 		String phoneDirName = "../data/phone";
 		String carrierDirName = "../data/carrier";
+		String outputFileName = "orphanEntries.csv";
 		String phoneAggregateName = "phone.csv";
 		String carrierAggregateName = "carrier.csv";
 		
@@ -28,12 +31,15 @@ public class Main {
 			phoneDirName = args[0];
 		if (args.length > 1)
 			carrierDirName = args[1];
+		if (args.length > 2)
+			outputFileName = args[2];
 		
 		// Find and combine input files
 		File phoneFile, carrierFile;
+		URI rootDir;
 		try {
 			// Generate paths
-			URI rootDir = Main.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+			rootDir = Main.class.getProtectionDomain().getCodeSource().getLocation().toURI();
 			Path phoneDirPath = Paths.get(rootDir.resolve(phoneDirName));
 			Path carrierDirPath = Paths.get(rootDir.resolve(carrierDirName));
 			// Combine files
@@ -52,11 +58,11 @@ public class Main {
 		}
 		
 		// Get lists of text records for all files we're interested in (2nd arg is name of class with custom parser)
-		ArrayList<textMessageRecord> phoneRecords = null;
-		ArrayList<textMessageRecord> carrierRecords = null;
+		ArrayList<TextMessageRecord> phoneRecords = null;
+		ArrayList<TextMessageRecord> carrierRecords = null;
 		try {
-			phoneRecords = TextLog.buildRecordList(phoneFile, "phoneRecord");
-			carrierRecords = TextLog.buildRecordList(carrierFile, "carrierRecord");
+			phoneRecords = TextLog.buildRecordList(phoneFile, "phone");
+			carrierRecords = TextLog.buildRecordList(carrierFile, "carrier");
 		} catch (IOException e) {
 			System.out.println("Failed to parse files");
 			e.printStackTrace();
@@ -64,7 +70,23 @@ public class Main {
 		}
 		
 		// Reconcile the records
+		ArrayList<TextMessageRecord> orphans = TextLog.compareTextLogs(phoneRecords, carrierRecords);
 		
+		// Put orphans in file
+		FileWriter writer;
+		try {
+			URI filePath = rootDir.resolve(outputFileName);
+			writer = new FileWriter(filePath.getPath());
+			for (TextMessageRecord rec : orphans)
+				writer.write(rec.toString());
+			writer.close();
+			System.out.println("Wrote orphans to " + filePath.toString());
+		}
+		catch (IOException e){
+			System.out.println("Could not write orphans to file " + outputFileName);
+			e.printStackTrace();
+			return;
+		}
 		
 	}
 	

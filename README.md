@@ -21,6 +21,7 @@ balanceTexts
 			.
 			.
 			.
+			
 It is important that all csv files be sorted by date (should be automatically), and that the files be named so that an alphanumeric sort will read them chronologically. Note that this code DOES NOT sort the dates (todo: throw error if things are found to be out of order).
 
 **Notes:**

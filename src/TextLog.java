@@ -1,39 +1,36 @@
 import java.io.*;
-import java.text.*;
 import java.util.*;
-
 
 public class TextLog {
 	
+
 	// Build list of all records for this file and type
-	public static ArrayList<textMessageRecord> buildRecordList(File aggregatedFile, String recordType) throws IOException{
+	public static ArrayList<TextMessageRecord> buildRecordList(File aggregatedFile, String recordType) throws IOException{
 		
 		// Open reader for file
 		BufferedReader reader = new BufferedReader(new FileReader(aggregatedFile.toString()));
 		
 		// Iterate over file and build array
 		String line = reader.readLine();
-		ArrayList<textMessageRecord> textRecs = new ArrayList<textMessageRecord>();
+		ArrayList<TextMessageRecord> textRecs = new ArrayList<TextMessageRecord>();
 		while (line != null){
-			textMessageRecord textRec;
 			
-			// Map to custom message formats/parsers here
-			if (recordType.equals("carrierRecord"))
-				textRec = new carrierRecord(line);
-			else if (recordType.equals("phoneRecord"))
-				textRec = new phoneRecord(line);
-			else {
-				reader.close();
-				throw new IOException("Did not recognize type " + recordType);
-			}
-			
-			// Add to list
-			if (textRec.successfulParse)
-				textRecs.add(textRec);
+			TextMessageRecord textRec = getTextRecordByType(recordType, line);
 			
 			// Get next line
 			line = reader.readLine();
-				
+			
+			if (!textRec.successfulParse) 
+				continue;
+			
+			// If it doesn't need to be split, add it as is. Otherwise, split
+			if (textRec.getNumTextsContainted() == 1)
+				textRecs.add(textRec);
+			else {
+				ArrayList<TextMessageRecord> split = splitMessage(textRec);
+				textRecs.addAll(split);
+			}
+							
 		}
 		
 		System.out.println("Parsed " + textRecs.size() + " records for " + recordType);
@@ -41,116 +38,95 @@ public class TextLog {
 		reader.close();
 		return textRecs;
 	}
-}
-
-// Code needed to convert records in csv files to objects that we can work with
-abstract class textMessageRecord {
 	
-	// Definition of message
-	public boolean successfulParse;
-	public Date timestamp;
-	public String contactNumber; // 9 numerals only
-	public boolean outgoing;
-	public String rawInfo;
-	
-	final int timeJitterSeconds = 90; // Might need to try adjusting this as needed
-	
-	public textMessageRecord(String commaDelimitedInfo){
-		rawInfo = commaDelimitedInfo;
-		successfulParse = parseInfo(rawInfo);		
+	// Given a string describing the type of the message record, generate that type
+	public static TextMessageRecord getTextRecordByType(String recordType, String info) throws IOException{
+		TextMessageRecord textRec;
+		if (recordType.equals("carrier"))
+			textRec = new CarrierRecord(info);
+		else if (recordType.equals("phone"))
+			textRec = new PhoneRecord(info);			
+		else {
+			throw new IOException("Did not recognize type " + recordType);
+		}
+		return textRec;
 	}
 	
-	// Specific to data source, returns true if record extracted
-	public abstract boolean parseInfo(String commaDelimitedInfo);
-	
-	// Check if is same
-	public boolean isEqual(textMessageRecord text){
-		// Go from least to most costly checks + most to least likely to trigger
-		if (text.outgoing != outgoing)
-			return false;
-		else if (!text.contactNumber.equals(contactNumber))
-			return false;
-		else if (Math.abs(text.timestamp.getTime() - timestamp.getTime()) > timeJitterSeconds)
-			return false;
-		// All checks passed
-		return true;
-	}
-}
-
-// For carrier (customize for files in carrier directory)
-class carrierRecord extends textMessageRecord {
-	
-	public carrierRecord(String commaDelimitedInfo){
-		super(commaDelimitedInfo);
-	}
-	
-	public boolean parseInfo(String commaDelimitedInfo){
-		// Location is useless, and confuses the commas. Remove any field that has a comma in quotes:
-		// Original: 11/26/15,11:29 AM,"Painesvl, OH",(440) 796-6227,Outgoing,Text,$0.00,
-		// After:    11/26/15,11:29 AM,               (440) 796-6227,Outgoing,Text,$0.00,
-		commaDelimitedInfo = commaDelimitedInfo.replaceAll("\"([^\"]*),([^\"]*)\",", "");
+	// Compare two ArrayLists (assume both in chronological order) and return ArrayList of orphans
+	public static ArrayList<TextMessageRecord> compareTextLogs(ArrayList<TextMessageRecord> log1, ArrayList<TextMessageRecord> log2){
 		
-		String fields[] = commaDelimitedInfo.split(",");
-		
-		// Check if we have a full record
-		if (fields.length != 6)
-			return false;
-		
-		// Get date/time
-		String timeStr = fields[0] + " " + fields[1];
-		DateFormat format = new SimpleDateFormat("MM/DD/YY HH:MM a");
-		try {
-			timestamp = format.parse(timeStr);
-		} catch (ParseException e) {
-			System.out.println("Could not extract date from " + timeStr);
-			return false;
+		ArrayList<TextMessageRecord> orphans = new ArrayList<TextMessageRecord>();
+		int orphanCount1 = 0;
+		int orphanCount2 = 0;
+				
+		ListIterator<TextMessageRecord> it1 = log1.listIterator();
+		ListIterator<TextMessageRecord> it2 = log2.listIterator();
+		while (it1.hasNext() || it2.hasNext()){
+			
+			// If one has reached end, add other to orphan list
+			if (!it1.hasNext()) {
+				orphans.add(it2.next());
+				orphanCount2++;
+				continue;
+			}
+			else if (!it2.hasNext()) {
+				orphans.add(it1.next());
+				orphanCount1++;
+				continue;
+			}
+			
+			// Check if the messages are the same
+			TextMessageRecord tm1 = it1.next();
+			TextMessageRecord tm2 = it2.next(); 
+			if (tm1.equals(tm2)) 
+				continue;
+			
+			// If not, add whoever is earlier to orphan list and back up other
+			if (tm1.getTime().before(tm2.getTime())) {
+				orphans.add(tm1);
+				orphanCount1++;
+				it2.previous();
+			}
+			else {
+				orphans.add(tm2);
+				orphanCount2++;
+				it1.previous();
+			}
+			
+			
 		}
 		
-		// Get phone number as numeral only string
-		contactNumber = fields[2].replaceAll("[()\\s-]*","");
+		System.out.println("Found " + orphans.size() + " orphans.");
 		
-		// Direction
-		outgoing = fields[3].equals("Outgoing") ? true : false;
+		// Determine how many from each source
+		if (log1.size() > 0){
+			String source1 = log1.get(0).getSource();
+			System.out.println(source1 + ": " + orphanCount1 + " orphans");
+		}
+		if (log2.size() > 0){
+			String source2 = log2.get(0).getSource();	
+			System.out.println(source2 + ": " + orphanCount2 + " orphans");
+		}
 		
-		return true;
+		return orphans;		
+	}
+	
+	public static ArrayList<TextMessageRecord> splitMessage(TextMessageRecord tm) throws IOException{
+		ArrayList<TextMessageRecord> splitMessages = new ArrayList<TextMessageRecord>();
+		int nMsgs = tm.getNumTextsContainted();
+		int approxLen = (int)Math.floor(tm.getLen() / nMsgs);
+		TextMessageRecord newTm ;
+		for (int i = 0; i < nMsgs; i++){
+			newTm = getTextRecordByType(tm.getSource(), tm.getRawInfo());
+			// Override length
+			newTm.setLen(approxLen);
+			splitMessages.add(newTm);
+		}
+		return splitMessages;
+			
 	}
 }
 
-// For phone (customize for files in phone output)
-class phoneRecord extends textMessageRecord {
-	
-	public phoneRecord(String commaDelimitedInfo){
-		super(commaDelimitedInfo);
-	}
-	// 2015-09-26,01:29:05,out,+14404886932,Eric Schupp,"No problem, he asked :) haha you have many aspirations mr. Schupp"
-	public boolean parseInfo(String commaDelimitedInfo){
-		
-		String fields[] = commaDelimitedInfo.split(",");
-		
-		// Check if we have a full record (not bothering to catch commas in message payload)
-		if (fields.length < 6)
-			return false;
-		
-		// Get date/time
-		String timeStr = fields[0] + " " + fields[1];
-		DateFormat format = new SimpleDateFormat("MM-DD-YY HH:MM:SS");
-		try {
-			timestamp = format.parse(timeStr);
-		} catch (ParseException e) {
-			// May be because a newline was used in a text
-			// System.out.println("Could not extract date from " + timeStr);
-			return false;
-		}
-		
-		// Direction
-		outgoing = fields[2].equals("out") ? true : false;
-		
-		// Get phone number as numeral only string (drop +1)
-		contactNumber = fields[3].replaceAll("^(\\+1)","");
-		
-		return true;
-	}
-}
 
 
 
