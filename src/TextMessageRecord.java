@@ -6,6 +6,7 @@ import java.util.Date;
 // Code needed to convert records in csv files to objects that we can work with
 public abstract class TextMessageRecord {
 	
+	
 	// Definition of message
 	protected boolean successfulParse;
 	protected Date timestamp;
@@ -55,12 +56,16 @@ public abstract class TextMessageRecord {
 		 return timestamp.toString() + ", "
 				 + contactNumber + ", "
 				 + (outgoing ? "Outgoing" : "Incoming") + ", "
+				 + len + ", "
 				 + source + ", \n";
 	 }
 	 
-	 // Figure out how many files to split into
+	 // Figure out how many files to split into (must be outgoing, and over 160 chars)
 	 public int getNumTextsContainted(){
-		 return (int) Math.ceil((double)len / maxMessageLength);
+		 if (!outgoing)
+			 return 1;
+		 else
+			 return (int) Math.ceil((double)len / maxMessageLength);
 	 }
 	 
 	 // Some set/get methods
@@ -148,7 +153,7 @@ class PhoneRecord extends TextMessageRecord {
 		contactNumber = fields[3].replaceAll("^(\\+1)","");
 		
 		source = "phone";
-		len = rawInfo.length();
+		len = fields[5].length();
 		
 		return true;
 	}	

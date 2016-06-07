@@ -9,6 +9,8 @@ import java.util.ArrayList;
  */
 public class Main {
 	
+	static final boolean DEBUG = true;
+	
 	/**
 	 * @param args:
 	 * 		phone_exportdirectory (default: ../data/phone_files) // relative to bin dir
@@ -16,6 +18,9 @@ public class Main {
 	 * 		output_file_name (default: orphanEntries.csv) 
 	 */
 	public static void main(String[] args) {
+		
+		// Manual flags (mainly used for development)
+		boolean useCachedOutputFiles = false;
 		
 		// Defaults (all paths relative to bin directory)
 //		String phoneDirName = "../data/phone_test";
@@ -34,7 +39,7 @@ public class Main {
 		if (args.length > 2)
 			outputFileName = args[2];
 		
-		// Find and combine input files
+		// Find and combine input files 
 		File phoneFile, carrierFile;
 		URI rootDir;
 		try {
@@ -45,8 +50,11 @@ public class Main {
 			// Combine files
 			phoneFile = Paths.get(rootDir.resolve(phoneAggregateName)).toFile();
 			carrierFile = Paths.get(rootDir.resolve(carrierAggregateName)).toFile();
-			aggregateSimFiles(phoneDirPath, phoneFile);
-			aggregateSimFiles(carrierDirPath, carrierFile);
+			// If we don't want to regenerate the output files
+			if (!useCachedOutputFiles) {
+				aggregateSimFiles(phoneDirPath, phoneFile);
+				aggregateSimFiles(carrierDirPath, carrierFile);
+			}
 			
 		} catch (URISyntaxException e) {
 			System.out.println("Could not find specified folders: " + phoneDirName + " " + carrierDirName);
@@ -70,7 +78,26 @@ public class Main {
 		}
 		
 		// Reconcile the records
-		ArrayList<TextMessageRecord> orphans = TextLog.compareTextLogs(phoneRecords, carrierRecords);
+		ArrayList<TextMessageRecord> orphans;
+		try {
+			orphans = TextLog.compareTextLogs(phoneRecords, carrierRecords);
+		}
+		catch (IOException e){
+			e.printStackTrace();
+			return;
+		}
+		
+		if (DEBUG){
+			try {
+				printTestLogs(phoneRecords, "bin/phoneRecordsDebug.csv");
+				printTestLogs(carrierRecords, "bin/carrierRecordsDebug.csv");
+			}
+			catch (IOException e){
+				System.out.println("Failed to write debug files");
+				e.printStackTrace();
+				// Continue anyways
+			}
+		}
 		
 		// Put orphans in file
 		FileWriter writer;
@@ -102,6 +129,13 @@ public class Main {
 		if (extIndex > 0)
 			ext = fname.toString().substring(extIndex+1);
 		return ext;
+	}
+	
+	public static void printTestLogs(ArrayList<TextMessageRecord> log, String filename) throws IOException{
+		FileWriter writer = new FileWriter(filename);
+		for (TextMessageRecord tm : log)
+			writer.write(tm.toString());
+		writer.close();
 	}
 	
 	// Combine all files in inputDir into outputFile (extension of outputFile must match all inputFiles

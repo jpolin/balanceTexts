@@ -2,8 +2,9 @@ import java.io.*;
 import java.util.*;
 
 public class TextLog {
-	
 
+	static final boolean DEBUG = true;
+	
 	// Build list of all records for this file and type
 	public static ArrayList<TextMessageRecord> buildRecordList(File aggregatedFile, String recordType) throws IOException{
 		
@@ -53,7 +54,19 @@ public class TextLog {
 	}
 	
 	// Compare two ArrayLists (assume both in chronological order) and return ArrayList of orphans
-	public static ArrayList<TextMessageRecord> compareTextLogs(ArrayList<TextMessageRecord> log1, ArrayList<TextMessageRecord> log2){
+	public static ArrayList<TextMessageRecord> compareTextLogs(ArrayList<TextMessageRecord> log1, ArrayList<TextMessageRecord> log2) throws IOException{
+		
+		FileWriter writer;
+		String empty = " , , , , , ";
+		if (DEBUG) {
+			try {
+				writer = new FileWriter("bin/dynamicDiff.csv");
+			}
+			catch (IOException e){
+				e.printStackTrace();
+				return null;
+			}
+		}
 		
 		ArrayList<TextMessageRecord> orphans = new ArrayList<TextMessageRecord>();
 		int orphanCount1 = 0;
@@ -78,23 +91,28 @@ public class TextLog {
 			// Check if the messages are the same
 			TextMessageRecord tm1 = it1.next();
 			TextMessageRecord tm2 = it2.next(); 
-			if (tm1.equals(tm2)) 
+			if (tm1.equals(tm2)) {
+				if (DEBUG) writer.write(tm1.toString().replace('\n', ' ') + tm2.toString());
 				continue;
-			
+			}
 			// If not, add whoever is earlier to orphan list and back up other
 			if (tm1.getTime().before(tm2.getTime())) {
 				orphans.add(tm1);
+				if (DEBUG) writer.write(tm1.toString());
 				orphanCount1++;
 				it2.previous();
 			}
 			else {
 				orphans.add(tm2);
+				if (DEBUG) writer.write(empty + tm2.toString());
 				orphanCount2++;
 				it1.previous();
 			}
 			
 			
 		}
+		
+		if (DEBUG) writer.close();
 		
 		System.out.println("Found " + orphans.size() + " orphans.");
 		
